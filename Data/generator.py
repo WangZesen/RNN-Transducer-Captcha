@@ -44,6 +44,7 @@ def time_slice(data, width = None, stride = None):
 
 def get_label(captcha, random_char, max_len):
 	res = [0] # prepend blank label
+	# res = [] 
 	for i in range(len(captcha)):
 		res.append(random_char.index(captcha[i]))
 	return np.array(res, dtype = np.int32), np.array(len(captcha), dtype = np.int32)

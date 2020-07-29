@@ -1,7 +1,8 @@
 import tensorflow as tf
 import warprnnt_tensorflow
 import argparse
-from tool import dataloader
+import numpy as np
+from tool import dataloader, visual
 from model import transducer
 
 parser = argparse.ArgumentParser(description = 'train RNN transducer', formatter_class = argparse.ArgumentDefaultsHelpFormatter)
@@ -31,7 +32,7 @@ parser_group.add_argument('--learning_rate', type = float, default = 0.001, help
 def train_step(slice_input, label_input, slice_len, label_len):
 	with tf.GradientTape() as tape:
 		outputs = model([slice_input, label_input])
-		loss = tf.reduce_mean(warprnnt_tensorflow.rnnt_loss(outputs, label_input, slice_len, label_len))
+		loss = tf.reduce_mean(warprnnt_tensorflow.rnnt_loss(outputs, label_input[:, 1:], slice_len, label_len))
 		tf.print(loss)
 	gradient = tape.gradient(loss, model.trainable_variables)
 	optimizer.apply_gradients(zip(gradient, model.trainable_variables))
@@ -43,12 +44,9 @@ def train_epoch(train_ds):
 
 @tf.function
 def test_step(slice_input, label_input, slice_len, label_len):
-	with tf.GradientTape() as tape:
-		outputs = model([slice_input, label_input])
-		loss = tf.reduce_mean(warprnnt_tensorflow.rnnt_loss(outputs, label_input, slice_len, label_len))
-		tf.print(loss)
-	gradient = tape.gradient(loss, model.trainable_variables)
-	optimizer.apply_gradients(zip(gradient, model.trainable_variables))
+	outputs = model([slice_input, label_input])
+	loss = tf.reduce_mean(warprnnt_tensorflow.rnnt_loss(outputs, label_input[:, 1:], slice_len, label_len))
+	tf.print(loss)
 
 @tf.function
 def test_epoch(test_ds):
@@ -67,19 +65,23 @@ train_ds = dataloader.get_dataset(args.data, args.train_prefix, args.batch_size)
 test_ds = dataloader.get_dataset(args.data, args.test_prefix, args.batch_size)
 model = transducer.build_transducer(args)
 optimizer = tf.keras.optimizers.Adam(learning_rate = args.learning_rate)
-print ('Test!')
-test_epoch(test_ds)
-print ('Train!')
-train_epoch(train_ds)
-print ('Test!')
-test_epoch(test_ds)
-print ('Train!')
-train_epoch(train_ds)
-print ('Test!')
-test_epoch(test_ds)
-print ('Train!')
-train_epoch(train_ds)
-print ('Test!')
-test_epoch(test_ds)
 
-model.summary()
+for batch in test_ds.take(1):
+	res = model([batch[0], batch[1]])
+	probs = np.array(tf.nn.softmax(res, axis=-1))[0:1]
+	label = np.array(batch[1])[0:1]
+	label_len = np.array(batch[3][0:1])[0]
+	visual.heatmap(probs, label, label_len)
+
+for i in range(2):
+	print ('Test!')
+	test_epoch(test_ds)
+	print ('Train!')
+	train_epoch(train_ds)
+	for batch in test_ds.take(1):
+		res = model([batch[0], batch[1]])
+		probs = np.array(tf.nn.softmax(res, axis=-1))[0:1]
+		label = np.array(batch[1])[0:1]
+		label_len = np.array(batch[3][0:1])[0]
+		visual.heatmap(probs, label, label_len)
+
